@@ -69,14 +69,22 @@ class SearchView(View):
             index="xidian",
             body={
                 "query": {
-                    "multi_match": {
-                        "query": key_words,
-                        "fields": ["title^2", "content", "source"]
+                    "function_score": {
+                        "query": {
+                            "multi_match": {
+                                "query": key_words,
+                                "fields": ["title^2", "content", "source"]
+                            }
+                        },
+                        "field_value_factor": {
+                            "field": "click_num",
+                            "modifier": "log1p"
+                        }
                     }
                 },
+                "min_score": 10,
                 "from": (page - 1) * 10,
                 "size": 10,
-                # 高亮处理
                 "highlight": {
                     "pre_tags": ['<span class="keyWord">'],
                     "post_tags": ['</span>'],
@@ -87,11 +95,31 @@ class SearchView(View):
                     }
                 }
             }
+            # body={
+            #     "query": {
+            #         "multi_match": {
+            #             "query": key_words,
+            #             "fields": ["title^2", "content", "source"]
+            #         }
+            #     },
+            #     "from": (page - 1) * 10,
+            #     "size": 10,
+            #     # 高亮处理
+            #     "highlight": {
+            #         "pre_tags": ['<span class="keyWord">'],
+            #         "post_tags": ['</span>'],
+            #         "fields": {
+            #             "title": {},
+            #             "content": {},
+            #             "source": {},
+            #         }
+            #     }
+            # }
         )
 
         # end_time = datetime.now()
         # last_time = (end_time - start_time).total_seconds()
-        last_time = response["took"]/1000
+        last_time = response["took"] / 1000
         # 计算相应时间
         total_nums = response["hits"]["total"]
         if (page % 10) > 0:
@@ -99,6 +127,7 @@ class SearchView(View):
         else:
             page_nums = int(total_nums / 10)
         hit_list = []
+        hit_set = {}
         for hit in response["hits"]["hits"]:
             hit_dict = {}
             if "title" in hit["highlight"]:
@@ -114,8 +143,10 @@ class SearchView(View):
             hit_dict["source"] = hit["_source"]["source"]
             hit_dict["url"] = hit["_source"]["url"]
             hit_dict["score"] = hit["_score"]
-
-            hit_list.append(hit_dict)
+            if hit["_source"]["url"] not in hit_set:
+                hit_list.append(hit_dict)
+            else:
+                hit_set.add(hit["_source"]["url"])
         return render(request, "result.html", {"page": page,
                                                "all_hits": hit_list,
                                                "key_words": key_words,
